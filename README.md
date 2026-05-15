@@ -23,3 +23,11 @@
 
 - Modell markiert mögliche REM-Ereignisse im Signal
 - diese Vorschläge werden später im Browser angezeigt
+
+Workflow:
+
+<p align="center">
+  <img src="docs/workflow/Workflow_inital.drawio.png" alt="Workflow" width="450">
+</p>
+
+
