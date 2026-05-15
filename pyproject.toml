@@ -1,0 +1,8 @@
+[project]
+name = "rem-detection"
+version = "0.1.0"
+description = "Simple binary REM event detection from EOG signals"
+requires-python = ">=3.10"
+
+[tool.setuptools.packages.find]
+where = ["src"]

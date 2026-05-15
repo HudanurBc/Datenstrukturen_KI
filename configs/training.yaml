@@ -1,0 +1,10 @@
+processed_dir: data/processed
+model_dir: models/round1
+reports_dir: reports
+
+batch_size: 32
+epochs: 25
+learning_rate: 0.001
+test_size: 0.2
+random_seed: 42
+threshold: 0.5

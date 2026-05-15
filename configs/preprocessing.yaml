@@ -1,0 +1,18 @@
+raw_dir: data/raw/dreams_rems
+processed_dir: data/processed
+
+sampling_rate: 100
+window_size_sec: 2.0
+step_size_sec: 1.0
+filter_low_hz: 0.5
+filter_high_hz: 10.0
+
+# If empty, the script will auto-detect channels containing "EOG".
+eog_channels: []
+
+# DREAMS REMs hypnogram has 360 values for 30 minutes => 5 seconds per value.
+hypnogram_epoch_sec: 5.0
+
+# For first simple version: use all windows.
+# Later you can set this to true if you only want windows inside REM sleep phases.
+only_rem_sleep_stage: false

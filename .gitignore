@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+data/processed/
+models/
+reports/predictions_for_review.csv

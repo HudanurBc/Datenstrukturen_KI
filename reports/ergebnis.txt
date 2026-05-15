@@ -1,0 +1,11 @@
+Das Modell hat insgesamt vorhergesagt:
+
+Typ	Anzahl
+vorhergesagte 0	13625
+vorhergesagte 1	2566
+
+Die echten Labels waren:
+
+Typ	Anzahl
+echte 0	13840
+echte 1	2351
