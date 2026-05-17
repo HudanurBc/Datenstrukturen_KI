@@ -1,0 +1,27 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyTorch Modelle und Daten
+*.pth
+*.pt
+*.npz
+
+# C-Extensions
+*.so
+
+
+# Virtuelle Umgebungen
+venv/
+env/
+ENV/
+.env
+
+# VS Code / IDE
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
