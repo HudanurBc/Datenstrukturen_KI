@@ -154,3 +154,16 @@ Precision / Recall / F1 auswerten
         ↓
 Predictions für Review exportieren
 ```
+
+Sie entstehen in prepare_dataset.py aus drei Quellen:
+
+```text
+excerpt*.edf                    →  das rohe EOG-Signal
+        ↓ filtern + schneiden
+windows.npy                     →  fertige Zeitfenster
+
+Visual_scoring1_excerpt*.txt    →  Expertenannotationen (Ground Truth)
+        ↓ overlaps_event()
+labels.npy                      →  0 oder 1 pro Fenster
+```
+Das Hypnogramm Hypnogram_excerpt*.txt wird zwar geladen, landet aber nur in metadata.csv — nicht in labels.npy.
