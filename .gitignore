@@ -1,0 +1,34 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyTorch models and binary data (globally ignored)
+*.pth
+*.pt
+*.npz
+*.edf
+
+# Data directories (globally ignored)
+DatabaseREMs/
+SLEEP_data/
+
+# Output directories: ignore everything by default, but allow subdirectories, PNGs, and TXTs
+**/output/*
+!**/output/
+!**/output/*/
+!**/output/**/*.png
+!**/output/**/*.txt
+
+# Virtual environments
+venv/
+env/
+.venv/
+ENV/
+.env
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
