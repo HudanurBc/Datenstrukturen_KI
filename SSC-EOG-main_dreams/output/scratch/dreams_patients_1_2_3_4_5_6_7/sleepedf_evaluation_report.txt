@@ -1,0 +1,24 @@
+===============================================================
+       SLEEP-EDF EXCERPTS EVALUATION SUMMARY REPORT            
+===============================================================
+
+--- Sleep-EDF Patient 1 ---
+Total 2s Epochs:     900 (30.0 Min)
+REM Stage Epochs:    0
+Predicted REM Events:0
+Accuracy:            100.00%
+Precision:           0.00%
+Recall:              0.00%
+F1-Score:            0.00%
+ROC AUC:             nan
+
+--- Sleep-EDF Patient 2 ---
+Total 2s Epochs:     900 (30.0 Min)
+REM Stage Epochs:    0
+Predicted REM Events:0
+Accuracy:            100.00%
+Precision:           0.00%
+Recall:              0.00%
+F1-Score:            0.00%
+ROC AUC:             nan
+

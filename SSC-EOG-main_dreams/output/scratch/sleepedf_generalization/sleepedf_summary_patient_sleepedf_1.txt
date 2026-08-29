@@ -1,0 +1,18 @@
+Sleep-EDF Generalization Demonstration – Patient sleepedf_1
+=======================================================
+Window selection: 5 min before first REM onset of the night
+Recording window (original): 9.91h – 10.41h
+  -> In seconds: 35670s to 37470s
+Total epochs (2s each): 900 (30.0 min)
+Threshold: 0.5
+Stage masking: NONE (raw EOG classification, no hypnogram required)
+
+Total predicted REM events: 191 / 900 (6.4 min)
+
+Breakdown by sleep stage (from hypnogram, not used for classification):
+  Deep Sleep (S3): 10 / 75 epochs predicted as REM
+  N2 Sleep: 37 / 240 epochs predicted as REM
+  N1 Sleep: 26 / 150 epochs predicted as REM
+  REM Sleep: 118 / 435 epochs predicted as REM
+
+Prediction file for Group 3: DatabaseREMs/predictions/prediction_sleepedf_1.txt

@@ -1,0 +1,10 @@
+              precision    recall  f1-score   support
+
+     Non-REM       0.83      1.00      0.91       748
+         REM       0.00      0.00      0.00       152
+
+    accuracy                           0.83       900
+   macro avg       0.42      0.50      0.45       900
+weighted avg       0.69      0.83      0.75       900
+
+ROC AUC: 0.5000

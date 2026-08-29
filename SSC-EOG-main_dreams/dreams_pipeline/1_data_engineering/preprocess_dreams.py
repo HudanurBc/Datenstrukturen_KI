@@ -51,17 +51,19 @@ def preprocess_all_patients(data_dir, output_dir):
         sampling_rate = raw.info['sfreq']
         eog_data = raw.get_data()[0] # Shape: [time_points]
         
-        # 3. Read labels from hypnogram (primary source according to DREAMS documentation)
-        # The hypnogram has 360 entries x 5 seconds = 1800 sec = 30 min (matches EDF!)
+        # 3. Read labels from Visual_scoring1 (REM events) as ground truth
         # DREAMS coding (Rechtschaffen & Kales):
-        #   4 = REM sleep (our label = 1)
-        #   5 = Wake (NOT REM!)
-        #   3 = S1, 2 = S2, 1 = S3, 0 = S4
-        hypno_path = os.path.join(data_dir, f"Hypnogram_excerpt{patient_num}.txt")
+        #   4 = REM sleep, 5 = Wake, 3 = S1, 2 = S2, 1 = S3, 0 = S4
+        # We will split the signal into 2-second epochs (200 data points at 100 Hz).
+        epoch_duration = 2.0  # seconds
+        epoch_size = int(epoch_duration * sampling_rate)  # 200
+        num_signal_epochs = len(eog_data) // epoch_size
         
-        num_signal_epochs = len(eog_data) // int(30 * sampling_rate)
         binary_labels = np.zeros(num_signal_epochs, dtype=np.int32)
+        sleep_stages = np.ones(num_signal_epochs, dtype=np.int32) * 5  # Default to Wake (5)
         
+        # Load hypnogram if exists (to identify Wake phases)
+        hypno_path = os.path.join(data_dir, f"Hypnogram_excerpt{patient_num}.txt")
         if os.path.exists(hypno_path):
             hypno_labels = []
             with open(hypno_path, 'r') as f:
@@ -75,60 +77,57 @@ def preprocess_all_patients(data_dir, output_dir):
                         continue
             hypno_labels = np.array(hypno_labels)
             
-            # 6 hypnogram steps (each 5 sec) = 1 epoch (30 sec)
-            # Majority vote: if more than 3 of 6 steps are REM (=4) -> epoch is REM
-            steps_per_epoch = 6
-            num_hypno_epochs = len(hypno_labels) // steps_per_epoch
+            # Each hypnogram entry corresponds to 5 seconds
+            # Map each 2-second epoch to the corresponding hypnogram stage
+            for ep in range(num_signal_epochs):
+                mid_time = ep * epoch_duration + (epoch_duration / 2.0)
+                hypno_idx = int(mid_time // 5.0)
+                if 0 <= hypno_idx < len(hypno_labels):
+                    sleep_stages[ep] = hypno_labels[hypno_idx]
+            print(f"Loaded hypnogram for Patient {patient_num} (mapped to {num_signal_epochs} epochs)")
             
-            for ep in range(min(num_signal_epochs, num_hypno_epochs)):
-                block = hypno_labels[ep * steps_per_epoch : (ep + 1) * steps_per_epoch]
-                binary_labels[ep] = 1 if np.sum(block == 4) > 3 else 0
-            
-            rem_count = np.sum(binary_labels)
-            print(f"Hypnogram: {len(hypno_labels)} entries (5-sec) -> {num_hypno_epochs} epochs (30-sec)")
-            print(f"REM epochs (value 4=REM): {rem_count} / {num_signal_epochs}")
-        else:
-            print(f"Warning: No hypnogram found for Patient {patient_num}! Using Visual_scoring1.")
-            visual_path = os.path.join(data_dir, f"Visual_scoring1_excerpt{patient_num}.txt")
-            if os.path.exists(visual_path):
-                with open(visual_path, 'r') as f:
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith("["):
+        # Load REM events from Visual_scoring1
+        visual_path = os.path.join(data_dir, f"Visual_scoring1_excerpt{patient_num}.txt")
+        if os.path.exists(visual_path):
+            event_count = 0
+            with open(visual_path, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("["):
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 1:
+                        try:
+                            start_sec = float(parts[0])
+                            epoch_idx = int(start_sec // epoch_duration)
+                            if 0 <= epoch_idx < num_signal_epochs:
+                                binary_labels[epoch_idx] = 1
+                                event_count += 1
+                        except ValueError:
                             continue
-                        parts = line.split()
-                        if len(parts) >= 1:
-                            try:
-                                start_sec = float(parts[0])
-                                epoch_idx = int(start_sec // 30)
-                                if 0 <= epoch_idx < num_signal_epochs:
-                                    binary_labels[epoch_idx] = 1
-                            except ValueError:
-                                continue
+            print(f"Loaded Visual_scoring1 REM events: mapped {event_count} events to {np.sum(binary_labels)} epochs")
+        else:
+            print(f"Warning: No Visual_scoring1 found for Patient {patient_num}!")
 
-        # 4. Split into 30-second epochs (30s * 100Hz = 3000 data points)
-        epoch_size = int(30 * sampling_rate) # 3000
-        num_signal_epochs = len(eog_data) // epoch_size
-        num_epochs = min(num_signal_epochs, len(binary_labels))
-        
-        print(f"Signal Epochs: {num_signal_epochs}, Label Epochs: {len(binary_labels)}")
-        print(f"Using minimum of: {num_epochs} epochs.")
+        # 4. Split into 2-second epochs (2s * 100Hz = 200 data points)
+        print(f"Signal Epochs: {num_signal_epochs}")
         
         # Cut signal and expand dimensions for the channel axis
-        trimmed_data = eog_data[:num_epochs * epoch_size]
-        x_epochs = np.split(trimmed_data, num_epochs)
+        trimmed_data = eog_data[:num_signal_epochs * epoch_size]
+        x_epochs = np.split(trimmed_data, num_signal_epochs)
         x_epochs = np.asarray(x_epochs).astype(np.float32)
-        x_epochs = np.expand_dims(x_epochs, axis=1) # Shape: [N, 1, 3000]
+        x_epochs = np.expand_dims(x_epochs, axis=1) # Shape: [N, 1, 200]
         
-        y_epochs = binary_labels[:num_epochs].astype(np.int32)
+        y_epochs = binary_labels.astype(np.int32)
+        stages_epochs = sleep_stages.astype(np.int32)
         
-        print(f"Final Shapes: X={x_epochs.shape}, Y={y_epochs.shape}")
-        print(f"REM Epochs: {np.sum(y_epochs)} / {len(y_epochs)} ({np.mean(y_epochs)*100:.2f}%)")
+        print(f"Final Shapes: X={x_epochs.shape}, Y={y_epochs.shape}, Stages={stages_epochs.shape}")
+        print(f"REM Event Epochs: {np.sum(y_epochs)} / {len(y_epochs)} ({np.mean(y_epochs)*100:.2f}%)")
         
         # 5. Save preprocessed data
         out_filename = f"patient_{patient_num}.npz"
         out_path = os.path.join(output_dir, out_filename)
-        np.savez(out_path, x=x_epochs, y=y_epochs, fs=sampling_rate)
+        np.savez(out_path, x=x_epochs, y=y_epochs, stages=stages_epochs, fs=sampling_rate)
         print(f"Successfully saved to: {out_path}")
 
 def load_active_learning_dataset(preprocessed_dir, patient_numbers):
@@ -137,6 +136,7 @@ def load_active_learning_dataset(preprocessed_dir, patient_numbers):
     """
     X_list = []
     y_list = []
+    stages_list = []
     
     for num in patient_numbers:
         path = os.path.join(preprocessed_dir, f"patient_{num}.npz")
@@ -146,11 +146,16 @@ def load_active_learning_dataset(preprocessed_dir, patient_numbers):
         data = np.load(path)
         X_list.append(data["x"])
         y_list.append(data["y"])
-        
+        if "stages" in data:
+            stages_list.append(data["stages"])
+        else:
+            stages_list.append(np.ones(len(data["y"]), dtype=np.int32) * 5)
+            
     X = np.concatenate(X_list, axis=0)
     y = np.concatenate(y_list, axis=0)
+    stages = np.concatenate(stages_list, axis=0)
     
-    return torch.from_numpy(X), torch.from_numpy(y)
+    return torch.from_numpy(X), torch.from_numpy(y), torch.from_numpy(stages)
 
 if __name__ == "__main__":
     print("================ STARTING DATA ENGINEERING PIPELINE ================")

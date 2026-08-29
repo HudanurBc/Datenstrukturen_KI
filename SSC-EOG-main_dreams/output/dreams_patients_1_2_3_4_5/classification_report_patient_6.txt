@@ -1,8 +1,8 @@
               precision    recall  f1-score   support
 
-     Non-REM       0.96      0.71      0.81        34
-         REM       0.71      0.96      0.82        26
+     Non-REM       0.99      0.94      0.97       888
+         REM       0.10      0.50      0.17        12
 
-    accuracy                           0.82        60
-   macro avg       0.84      0.83      0.82        60
-weighted avg       0.85      0.82      0.82        60
+    accuracy                           0.93       900
+   macro avg       0.55      0.72      0.57       900
+weighted avg       0.98      0.93      0.96       900
