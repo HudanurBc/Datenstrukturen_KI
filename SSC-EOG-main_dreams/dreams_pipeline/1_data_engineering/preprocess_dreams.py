@@ -4,9 +4,14 @@
 
 import os
 import glob
+import sys
 import numpy as np
 import mne
 import torch
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.append(project_root)
+from settings import SAMPLING_RATE_HZ, WINDOW_DURATION_SECONDS, WINDOW_STEP_SECONDS
 
 def preprocess_all_patients(data_dir, output_dir):
     """
@@ -14,7 +19,7 @@ def preprocess_all_patients(data_dir, output_dir):
     - Extracts the EOG1 channel.
     - Resamples the signal from 200 Hz to 100 Hz.
     - Reads the hypnogram labels (txt) and converts them to binary (REM = 4 -> 1, rest -> 0).
-    - Splits the EOG signal into 30-second epochs (3000 data points).
+    - Splits the EOG signal into overlapping 2-second windows with a 1-second step.
     - Saves each patient individually as a .npz file for flexible Active Learning.
     """
     os.makedirs(output_dir, exist_ok=True)
@@ -44,9 +49,9 @@ def preprocess_all_patients(data_dir, output_dir):
         
         # 2. Resample to 100 Hz (to match the pretraining model!)
         original_sfreq = raw.info['sfreq']
-        if original_sfreq != 100.0:
-            print(f"Resampling from {original_sfreq} Hz to 100.0 Hz...")
-            raw.resample(100.0, verbose=False)
+        if original_sfreq != SAMPLING_RATE_HZ:
+            print(f"Resampling from {original_sfreq} Hz to {SAMPLING_RATE_HZ} Hz...")
+            raw.resample(SAMPLING_RATE_HZ, verbose=False)
             
         sampling_rate = raw.info['sfreq']
         eog_data = raw.get_data()[0] # Shape: [time_points]
@@ -54,10 +59,13 @@ def preprocess_all_patients(data_dir, output_dir):
         # 3. Read labels from Visual_scoring1 (REM events) as ground truth
         # DREAMS coding (Rechtschaffen & Kales):
         #   4 = REM sleep, 5 = Wake, 3 = S1, 2 = S2, 1 = S3, 0 = S4
-        # We will split the signal into 2-second epochs (200 data points at 100 Hz).
-        epoch_duration = 2.0  # seconds
-        epoch_size = int(epoch_duration * sampling_rate)  # 200
-        num_signal_epochs = len(eog_data) // epoch_size
+        # Keep the model input at 2 seconds, but use a 1-second step for overlap.
+        window_duration = WINDOW_DURATION_SECONDS
+        window_step = WINDOW_STEP_SECONDS
+        window_size = int(window_duration * sampling_rate)
+        step_size = int(window_step * sampling_rate)
+        num_signal_epochs = max(0, 1 + (len(eog_data) - window_size) // step_size)
+        window_starts = np.arange(num_signal_epochs) * step_size
         
         binary_labels = np.zeros(num_signal_epochs, dtype=np.int32)
         sleep_stages = np.ones(num_signal_epochs, dtype=np.int32) * 5  # Default to Wake (5)
@@ -79,8 +87,8 @@ def preprocess_all_patients(data_dir, output_dir):
             
             # Each hypnogram entry corresponds to 5 seconds
             # Map each 2-second epoch to the corresponding hypnogram stage
-            for ep in range(num_signal_epochs):
-                mid_time = ep * epoch_duration + (epoch_duration / 2.0)
+            for ep, start_idx in enumerate(window_starts):
+                mid_time = (start_idx / sampling_rate) + (window_duration / 2.0)
                 hypno_idx = int(mid_time // 5.0)
                 if 0 <= hypno_idx < len(hypno_labels):
                     sleep_stages[ep] = hypno_labels[hypno_idx]
@@ -89,7 +97,7 @@ def preprocess_all_patients(data_dir, output_dir):
         # Load REM events from Visual_scoring1
         visual_path = os.path.join(data_dir, f"Visual_scoring1_excerpt{patient_num}.txt")
         if os.path.exists(visual_path):
-            event_count = 0
+            rem_events = []
             with open(visual_path, 'r') as f:
                 for line in f:
                     line = line.strip()
@@ -99,22 +107,28 @@ def preprocess_all_patients(data_dir, output_dir):
                     if len(parts) >= 1:
                         try:
                             start_sec = float(parts[0])
-                            epoch_idx = int(start_sec // epoch_duration)
-                            if 0 <= epoch_idx < num_signal_epochs:
-                                binary_labels[epoch_idx] = 1
-                                event_count += 1
+                            duration_sec = float(parts[1]) if len(parts) >= 2 else 0.0
+                            rem_events.append((start_sec, start_sec + duration_sec))
                         except ValueError:
                             continue
-            print(f"Loaded Visual_scoring1 REM events: mapped {event_count} events to {np.sum(binary_labels)} epochs")
+            for ep, start_idx in enumerate(window_starts):
+                window_start = start_idx / sampling_rate
+                window_end = window_start + window_duration
+                binary_labels[ep] = any(
+                    event_start < window_end and event_end >= window_start
+                    for event_start, event_end in rem_events
+                )
+            print(f"Loaded Visual_scoring1 REM events: mapped {len(rem_events)} events to {np.sum(binary_labels)} windows")
         else:
             print(f"Warning: No Visual_scoring1 found for Patient {patient_num}!")
 
-        # 4. Split into 2-second epochs (2s * 100Hz = 200 data points)
+        # 4. Split into overlapping 2-second windows (1-second step).
         print(f"Signal Epochs: {num_signal_epochs}")
         
-        # Cut signal and expand dimensions for the channel axis
-        trimmed_data = eog_data[:num_signal_epochs * epoch_size]
-        x_epochs = np.split(trimmed_data, num_signal_epochs)
+        x_epochs = np.asarray([
+            eog_data[start:start + window_size]
+            for start in window_starts
+        ])
         x_epochs = np.asarray(x_epochs).astype(np.float32)
         x_epochs = np.expand_dims(x_epochs, axis=1) # Shape: [N, 1, 200]
         

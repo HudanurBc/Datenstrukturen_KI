@@ -19,26 +19,34 @@ from src.model.se_resnet_18 import resnet18
 from src.model.transformer_model import TransformerModel
 from src.train_function import train
 from preprocess_dreams import load_active_learning_dataset
+from settings import (
+    ATTENTION_HEADS,
+    CLASS_COUNT,
+    CNN_LAYERS,
+    DROPOUT,
+    DREAMS_TRAIN_PATIENTS,
+    EMBEDDING_SIZE,
+    FROM_SCRATCH,
+    HIDDEN_SIZE,
+    LEARNING_RATE,
+    REM_BOOST,
+    TRAINING_BATCH_SIZE,
+    TRAINING_EPOCHS,
+    TRANSFORMER_LAYERS,
+)
 
 # 1. SETTINGS (Adjust training parameters here!)
-FROM_SCRATCH = True     # True -> train model from scratch; False -> load pretrained Sleep-EDF weights
-PATIENTS = "1,2,3,4,5,6,7"  # Patients for training (e.g. "1,2,3,4,5,6,7")
-EPOCHS = 15            # Number of epochs for fine-tuning
-BATCH_SIZE = 32         # Batch size
-LR = 0.0002             # Learning rate
-REM_BOOST = 2.0         # REM_BOOST > 1.0 -> Penalize missing REM events more to ensure high recall
+PATIENTS = ",".join(str(patient) for patient in DREAMS_TRAIN_PATIENTS)
 OUTPUT_MODEL = "dreams_model.pth"  # Output model filename
 PRETRAINED_PATH = ""    # Optional: Path to a specific pretrained model
 
 # Hyperparameters (must match the pretraining hyperparameters!)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-CLASS = 2
-EMB_SIZE = 512
-nHEADS = 8
-D_HID = 1024
-nLAYERS = 2
-CNN_LAYERS = [2, 2, 2, 2]
-DROPOUT = 0.1
+CLASS = CLASS_COUNT
+EMB_SIZE = EMBEDDING_SIZE
+nHEADS = ATTENTION_HEADS
+D_HID = HIDDEN_SIZE
+nLAYERS = TRANSFORMER_LAYERS
 
 def main():
     # Parse patient numbers
@@ -69,7 +77,7 @@ def main():
         
     dataset = TensorDataset(X.float(), y.long())
     pin_memory = True if torch.cuda.is_available() else False
-    loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, pin_memory=pin_memory)
+    loader = DataLoader(dataset, batch_size=TRAINING_BATCH_SIZE, shuffle=True, pin_memory=pin_memory)
     
     # 2. Initialize model
     modelCNN = resnet18(cnn_layers=CNN_LAYERS, in_lead=1).to(DEVICE)
@@ -133,14 +141,14 @@ def main():
     print(f"Class weights for loss function (incl. REM boost {REM_BOOST:.2f}): Non-REM={class_weights[0]:.4f}, REM={class_weights[1]:.4f}")
     
     criterion = nn.NLLLoss(weight=class_weights)
-    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
     
     # 5. Training
     print("Starting fine-tuning loop...")
     model.train()
-    for epoch in range(1, EPOCHS + 1):
+    for epoch in range(1, TRAINING_EPOCHS + 1):
         avg_loss = train(model, loader, criterion, optimizer, epoch, DEVICE)
-        print(f"Epoch {epoch:2d}/{EPOCHS} | Loss: {avg_loss:5.4f}")
+        print(f"Epoch {epoch:2d}/{TRAINING_EPOCHS} | Loss: {avg_loss:5.4f}")
         
     # 6. Save model
     sub_dir = "scratch" if FROM_SCRATCH else "transfer"
@@ -156,9 +164,9 @@ def main():
     with open(param_path, "w") as f:
         f.write(f"From Scratch: {FROM_SCRATCH}\n")
         f.write(f"Patients: {PATIENTS}\n")
-        f.write(f"Epochs: {EPOCHS}\n")
-        f.write(f"Batch Size: {BATCH_SIZE}\n")
-        f.write(f"Learning Rate: {LR}\n")
+        f.write(f"Epochs: {TRAINING_EPOCHS}\n")
+        f.write(f"Batch Size: {TRAINING_BATCH_SIZE}\n")
+        f.write(f"Learning Rate: {LEARNING_RATE}\n")
         f.write(f"REM Boost: {REM_BOOST}\n")
         f.write(f"Dropout: {DROPOUT}\n")
         f.write(f"CNN Layers: {CNN_LAYERS}\n")

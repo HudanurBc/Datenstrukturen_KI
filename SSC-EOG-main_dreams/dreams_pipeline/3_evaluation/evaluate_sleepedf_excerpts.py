@@ -22,22 +22,33 @@ sys.path.append(os.path.join(project_root, "dreams_pipeline", "1_data_engineerin
 
 from src.model.se_resnet_18 import resnet18
 from src.model.transformer_model import TransformerModel
+from settings import (
+    ATTENTION_HEADS,
+    CLASS_COUNT,
+    CNN_LAYERS,
+    DROPOUT,
+    EMBEDDING_SIZE,
+    FROM_SCRATCH,
+    HIDDEN_SIZE,
+    EVALUATION_BATCH_SIZE,
+    REM_THRESHOLD,
+    TRANSFORMER_LAYERS,
+    WINDOW_DURATION_SECONDS,
+    WINDOW_STEP_SECONDS,
+)
 
 # ===== SETTINGS =====
-FROM_SCRATCH = True    # True -> use scratch model; False -> use transfer model
-THRESHOLD = 0.50       # Probability threshold for predicting REM event
+THRESHOLD = REM_THRESHOLD
 # NO MASK_STAGES: raw EOG classification, no hypnogram needed!
 
 # Model Hyperparameters (must match train_dreams.py)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 16
-CLASS = 2
-EMB_SIZE = 512
-nHEADS = 8
-D_HID = 1024
-nLAYERS = 2
-CNN_LAYERS = [2, 2, 2, 2]
-DROPOUT = 0.1
+BATCH_SIZE = EVALUATION_BATCH_SIZE
+CLASS = CLASS_COUNT
+EMB_SIZE = EMBEDDING_SIZE
+nHEADS = ATTENTION_HEADS
+D_HID = HIDDEN_SIZE
+nLAYERS = TRANSFORMER_LAYERS
 
 # DREAMS stage names for annotation (from hypnogram stored in npz, only used for plot visualization)
 STAGE_NAMES = {0: "Deep Sleep (S4)", 1: "Deep Sleep (S3)", 2: "N2 Sleep", 3: "N1 Sleep", 4: "REM Sleep", 5: "Wake"}
@@ -105,13 +116,14 @@ def evaluate_sleepedf_patient(patient_id, model, output_dir):
         X = X.view(X.shape[0], 1, -1)
 
     num_epochs = X.shape[0]
-    epoch_duration = 2.0  # seconds
-    time_axis_min = np.arange(num_epochs) * epoch_duration / 60.0  # time in minutes
+    window_duration = WINDOW_DURATION_SECONDS
+    window_step = WINDOW_STEP_SECONDS
+    time_axis_min = start_sec / 60.0 + np.arange(num_epochs) * window_step / 60.0
 
     print(f"\n{'='*55}")
     print(f"  Inference on Sleep-EDF Patient: {patient_id}")
-    print(f"  Recording window: {start_sec/3600:.2f}h to {(start_sec + num_epochs*2)/3600:.2f}h (original recording)")
-    print(f"  Epochs: {num_epochs} ({num_epochs * 2 / 60:.1f} min) | Threshold: {THRESHOLD}")
+    print(f"  Recording window: {start_sec/3600:.2f}h to {(start_sec + (num_epochs - 1) * window_step + window_duration)/3600:.2f}h (original recording)")
+    print(f"  Windows: {num_epochs} ({(num_epochs - 1) * window_step + window_duration:.1f}s span) | Threshold: {THRESHOLD}")
     print(f"  No stage masking applied (raw EOG classification only)")
     print(f"{'='*55}")
 
@@ -120,7 +132,7 @@ def evaluate_sleepedf_patient(patient_id, model, output_dir):
     preds = (rem_probs > THRESHOLD).astype(int)
 
     total_predicted = preds.sum()
-    print(f"  Total predicted REM events: {total_predicted} / {num_epochs} epochs ({total_predicted*2:.0f}s = {total_predicted*2/60:.1f} min)")
+    print(f"  Total predicted REM windows: {total_predicted} / {num_epochs} ({total_predicted * window_step:.0f}s by step)")
 
     # Stage-by-stage breakdown
     print("\n  Predicted REM events per sleep stage:")
@@ -142,8 +154,8 @@ def evaluate_sleepedf_patient(patient_id, model, output_dir):
         f.write("[predicted_REMs/EOGs]\n")
         for i, pred in enumerate(preds):
             if pred == 1:
-                t_start = i * epoch_duration
-                f.write(f"   {t_start:.4f}\t    {epoch_duration:.4f}\n")
+                t_start = i * window_step
+                f.write(f"   {t_start:.4f}\t    {window_step:.4f}\n")
     print(f"  TXT predictions for Group 3 saved to: {txt_path}")
 
     # ===== PLOT 1: Timeline of predicted REM events + sleep stages =====

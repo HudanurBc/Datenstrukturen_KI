@@ -1,0 +1,153 @@
+DREAMS / SSC-EOG - ZENTRALE EINSTELLUNGEN
+=========================================
+
+EINLEITUNG - ERWEITERUNGEN
+----------------------------------
+
+Heute wurde die Fensterung der DREAMS-Pipeline erweitert. Die EOG-Signale werden
+jetzt standardmaessig in 2-Sekunden-Fenster mit einer Schrittweite von 1 Sekunde
+aufgeteilt. Dadurch ueberlappen sich benachbarte Fenster um 1 Sekunde (50 Prozent).
+Die Eingabegroesse des bestehenden Modells bleibt dabei mit 200 Samples bei 100 Hz
+unveraendert.
+
+Zusaetzlich wurden die REM-Labels an die ueberlappenden Fenster angepasst. REM-
+Ereignisse werden markiert, wenn sie das jeweilige Fenster beruehren. Die Zeitachsen
+der Evaluation, der Annotationsexport und der Import von menschlichem Feedback
+verwenden ebenfalls die neue Schrittweite.
+
+Als Vergleich ist ausserdem die Variante mit 1-Sekunden-Fenstern und 0,5 Sekunden
+Schrittweite dokumentiert. Sie bietet eine hoehere zeitliche Aufloesung, benoetigt
+aber weniger Signal-Kontext und passt nicht direkt zur bisherigen Eingabegroesse
+von 200 Samples.
+
+Diese Datei wurde neu als zentrale Uebersicht fuer alle wichtigen Einstellungen
+angelegt. Hier koennen Fensterung, Datenaufteilung, Training, Modell und Evaluation
+verglichen und entschieden werden. Nach einer Auswahl muessen die entsprechenden
+Werte in der aktiven Datei settings.py geaendert werden.
+
+
+Diese Datei ist die verständliche Dokumentation. Die aktive Konfiguration liegt in
+settings.py im Projektordner. Die Hauptpipeline importiert die Werte automatisch
+aus dieser Datei.
+
+
+1. FENSTERUNG
+-------------
+
+Aktive Empfehlung:
+WINDOW_DURATION_SECONDS = 2.0
+WINDOW_STEP_SECONDS     = 1.0
+
+Bedeutung:
+- Fensterlänge: 2 Sekunden
+- Schrittweite: 1 Sekunde
+- Überlappung: 1 Sekunde bzw. 50 Prozent
+- Eingabe bei 100 Hz: 200 Samples
+- Modellform: [Anzahl_Fenster, 1, 200]
+
+Alternative A - kurze Fenster:
+WINDOW_DURATION_SECONDS = 1.0
+WINDOW_STEP_SECONDS     = 0.5
+- 50 Prozent Überlappung
+- 100 Samples pro Fenster
+- bessere zeitliche Auflösung
+- weniger Signal-Kontext und schlechtere Vergleichbarkeit mit 200-Sample-Pretraining
+
+Alternative B - keine Überlappung:
+WINDOW_DURATION_SECONDS = 2.0
+WINDOW_STEP_SECONDS     = 2.0
+- weniger Daten und schnelleres Training
+- gröbere zeitliche Auflösung
+
+Empfehlung für den ersten Vergleich:
+1. 2.0 / 1.0  (Standard)
+2. 1.0 / 0.5  (Experiment)
+3. 2.0 / 2.0  (Kontrollgruppe)
+
+Wichtig:
+WINDOW_STEP_SECONDS darf nicht größer als WINDOW_DURATION_SECONDS sein.
+Bei Änderungen der Fensterlänge müssen Training und Evaluation neu durchgeführt werden.
+
+
+2. SIGNALVERARBEITUNG
+---------------------
+
+SAMPLING_RATE_HZ       = 100
+SIGNAL_CHANNEL         = EOG1 oder EOG horizontal
+DREAMS_REM_LABEL       = 1
+DREAMS_NON_REM_LABEL   = 0
+SLEEPEDF_REM_STAGE      = 4
+SLEEPEDF_WAKE_STAGE     = 5
+
+Die Daten werden auf 100 Hz resampelt, damit sie zum bestehenden Modell passen.
+
+
+3. DATENAUSWAHL
+---------------
+
+DREAMS_TRAIN_PATIENTS  = 1,2,3,4,5,6,7
+DREAMS_TEST_PATIENTS   = 8,9
+SLEEPEDF_EXCERPT_MIN   = 30
+SLEEPEDF_EXCERPT_SEC   = 1800
+
+Die klassische Sleep-EDF-Preprocessing-Pipeline verwendet weiterhin 30-Sekunden-
+Schlafstadien-Epochen. Diese Struktur nicht mit der 2-Sekunden-DREAMS-Fensterung
+vermischen.
+
+
+4. TRAINING
+-----------
+
+FROM_SCRATCH            = True
+EPOCHS                  = 15
+BATCH_SIZE              = 32
+LEARNING_RATE           = 0.0002
+REM_BOOST               = 2.0
+DROPOUT                 = 0.1
+
+Wenn FROM_SCRATCH = False gesetzt wird, versucht die Pipeline, ein vortrainiertes
+Modell aus dem Sleep-EDF-Output zu laden.
+
+
+5. MODELL
+---------
+
+CLASSES                 = 2
+EMBEDDING_SIZE          = 512
+ATTENTION_HEADS         = 8
+HIDDEN_SIZE             = 1024
+TRANSFORMER_LAYERS      = 2
+CNN_LAYERS              = 2,2,2,2
+INPUT_CHANNELS          = 1
+
+Bei der aktuellen Empfehlung 2.0 / 1.0 bleibt die Eingabegröße 200 Samples und
+die vorhandenen Modellgewichte bleiben direkt kompatibel.
+
+
+6. EVALUATION / EXPORT
+----------------------
+
+REM_THRESHOLD           = 0.5
+STAGE_MASKING           = deaktiviert oder projektspezifisch
+EXPORT_STEP_SECONDS     = 1.0
+
+Bei überlappenden Fenstern werden positive Vorhersagen als 1-Sekunden-Schritte
+exportiert. Dadurch entstehen keine künstlich doppelten 2-Sekunden-Annotationen.
+
+
+7. NACH EINER ÄNDERUNG
+----------------------
+
+1. Werte in settings.py auswählen und ändern.
+2. Preprocessing erneut ausführen.
+3. Modell neu trainieren.
+4. Evaluation und Export erneut ausführen.
+5. Ergebnisse der drei Fenster-Varianten vergleichen:
+   - REM Recall
+   - REM Precision
+   - F1-Score
+   - False Positives pro Minute
+   - Laufzeit und Speicherbedarf
+
+Nicht nur die Accuracy vergleichen: Bei REM-Erkennung ist der Recall besonders
+wichtig, Precision und False Positives dürfen aber nicht ignoriert werden.

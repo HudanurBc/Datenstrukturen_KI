@@ -4,9 +4,14 @@
 # and saves preprocessed .npz files for model inference & export.
 
 import os
+import sys
 import numpy as np
 import mne
 import torch
+
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.append(project_root)
+from settings import SAMPLING_RATE_HZ, SLEEPEDF_EXCERPT_SECONDS, WINDOW_DURATION_SECONDS, WINDOW_STEP_SECONDS
 
 def find_rem_30min_window(annotations, total_duration_sec, window_duration_sec=1800.0):
     """
@@ -73,9 +78,9 @@ def preprocess_sleepedf_patient(psg_path, hypno_path, patient_id, output_dir):
     raw.pick_channels([eog_ch])
     
     # Resample to 100 Hz if needed
-    if raw.info['sfreq'] != 100.0:
-        print(f"Resampling from {raw.info['sfreq']} Hz to 100.0 Hz...")
-        raw.resample(100.0, verbose=False)
+    if raw.info['sfreq'] != SAMPLING_RATE_HZ:
+        print(f"Resampling from {raw.info['sfreq']} Hz to {SAMPLING_RATE_HZ} Hz...")
+        raw.resample(SAMPLING_RATE_HZ, verbose=False)
         
     sampling_rate = raw.info['sfreq']
     full_eog_signal = raw.get_data()[0] * 1e6 # Convert Volts to Microvolts (uV) to match DREAMS scaling!
@@ -83,22 +88,27 @@ def preprocess_sleepedf_patient(psg_path, hypno_path, patient_id, output_dir):
     
     # 2. Read Annotations / Hypnogram
     annotations = mne.read_annotations(hypno_path)
-    start_sec, end_sec = find_rem_30min_window(annotations, total_duration_sec, window_duration_sec=1800.0)
+    start_sec, end_sec = find_rem_30min_window(
+        annotations, total_duration_sec, window_duration_sec=SLEEPEDF_EXCERPT_SECONDS
+    )
     
     # 3. Crop signal to 30-min window
     start_idx = int(start_sec * sampling_rate)
     end_idx = int(end_sec * sampling_rate)
     cropped_signal = full_eog_signal[start_idx:end_idx]
     
-    epoch_duration = 2.0 # seconds
-    epoch_size = int(epoch_duration * sampling_rate) # 200 points
-    num_epochs = len(cropped_signal) // epoch_size
-    
-    # Trim signal to exact multiple of 200 points
-    trimmed_signal = cropped_signal[:num_epochs * epoch_size]
-    
-    # Slice into 2-second epochs
-    x_epochs = np.split(trimmed_signal, num_epochs)
+    window_duration = WINDOW_DURATION_SECONDS
+    window_step = WINDOW_STEP_SECONDS
+    window_size = int(window_duration * sampling_rate)
+    step_size = int(window_step * sampling_rate)
+    num_epochs = max(0, 1 + (len(cropped_signal) - window_size) // step_size)
+    window_starts = np.arange(num_epochs) * step_size
+
+    # Slice into overlapping 2-second windows with a 1-second step.
+    x_epochs = np.asarray([
+        cropped_signal[start:start + window_size]
+        for start in window_starts
+    ])
     x_epochs = np.asarray(x_epochs).astype(np.float32)
     x_epochs = np.expand_dims(x_epochs, axis=1) # Shape: [num_epochs, 1, 200]
     
@@ -110,7 +120,7 @@ def preprocess_sleepedf_patient(psg_path, hypno_path, patient_id, output_dir):
     stages_epochs = np.ones(num_epochs, dtype=np.int32) * 5 # Default Wake
     
     for ep in range(num_epochs):
-        ep_time_global = start_sec + (ep * epoch_duration) + (epoch_duration / 2.0)
+        ep_time_global = start_sec + (ep * window_step) + (window_duration / 2.0)
         
         # Check annotations for stage at this timestamp
         for ann in annotations:
@@ -132,8 +142,8 @@ def preprocess_sleepedf_patient(psg_path, hypno_path, patient_id, output_dir):
                 break
                 
     rem_epoch_count = np.sum(stages_epochs == 4)
-    print(f"Extracted {num_epochs} 2-second epochs ({num_epochs * 2 / 60:.1f} min).")
-    print(f"Sleep Stage Mapping: REM stage (4) present in {rem_epoch_count} / {num_epochs} epochs ({rem_epoch_count * 2 / 60:.1f} min).")
+    print(f"Extracted {num_epochs} overlapping 2-second windows ({num_epochs * window_step / 60:.1f} min span).")
+    print(f"Sleep Stage Mapping: REM stage (4) present in {rem_epoch_count} / {num_epochs} windows ({rem_epoch_count * window_step / 60:.1f} min by step).")
     
     # Save preprocessed .npz
     os.makedirs(output_dir, exist_ok=True)

@@ -21,23 +21,32 @@ sys.path.append(os.path.join(project_root, "dreams_pipeline", "1_data_engineerin
 from src.model.se_resnet_18 import resnet18
 from src.model.transformer_model import TransformerModel
 from preprocess_dreams import load_active_learning_dataset
+from settings import (
+    ATTENTION_HEADS,
+    CLASS_COUNT,
+    CNN_LAYERS,
+    DROPOUT,
+    DREAMS_TEST_PATIENT,
+    EMBEDDING_SIZE,
+    FROM_SCRATCH,
+    HIDDEN_SIZE,
+    MASK_STAGES,
+    REM_THRESHOLD,
+    EVALUATION_BATCH_SIZE,
+    TRANSFORMER_LAYERS,
+)
 
-# 1. SETTINGS (Choose the test patient and evaluation settings here!)
-FROM_SCRATCH = True                                      # True -> evaluate scratch model; False -> transfer model
-PATIENT = 8                                              # Patient to evaluate
-THRESHOLD = 0.50                                         # Probability threshold for predicting REM event (class 1)
-MASK_STAGES = [0, 1, 2, 3]                               # Stages to mask out (Stadium 5 / Wake auskommentiert -> wird NICHT mehr maskiert)
+PATIENT = DREAMS_TEST_PATIENT
+THRESHOLD = REM_THRESHOLD
 
 # Hyperparameters (must match train_dreams.py!)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-BATCH_SIZE = 16
-CLASS = 2
-EMB_SIZE = 512
-nHEADS = 8
-D_HID = 1024
-nLAYERS = 2
-CNN_LAYERS = [2, 2, 2, 2]
-DROPOUT = 0.1
+BATCH_SIZE = EVALUATION_BATCH_SIZE
+CLASS = CLASS_COUNT
+EMB_SIZE = EMBEDDING_SIZE
+nHEADS = ATTENTION_HEADS
+D_HID = HIDDEN_SIZE
+nLAYERS = TRANSFORMER_LAYERS
 CLASS_NAMES = ["Non-REM", "REM"]
 
 def main():

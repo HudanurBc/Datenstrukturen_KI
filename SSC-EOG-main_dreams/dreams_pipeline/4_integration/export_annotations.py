@@ -17,24 +17,37 @@ sys.path.append(os.path.join(project_root, "dreams_pipeline", "1_data_engineerin
 from src.model.se_resnet_18 import resnet18
 from src.model.transformer_model import TransformerModel
 from preprocess_dreams import load_active_learning_dataset
+from settings import (
+    ATTENTION_HEADS,
+    CLASS_COUNT,
+    CNN_LAYERS,
+    DROPOUT,
+    EMBEDDING_SIZE,
+    EVALUATION_BATCH_SIZE,
+    EXPORT_ACTION,
+    EXPORT_PATIENT,
+    FROM_SCRATCH,
+    HIDDEN_SIZE,
+    MASK_STAGES,
+    REM_THRESHOLD,
+    TRANSFORMER_LAYERS,
+    WINDOW_DURATION_SECONDS,
+    WINDOW_STEP_SECONDS,
+    FEEDBACK_FILE,
+)
 
 # 1. SETTINGS (Adjust Action, Patient, and Paths here!)
-ACTION = "export"        # Either "export" (create predictions) or "import" (read feedback)
-FROM_SCRATCH = True      # True -> load scratch model; False -> load transfer model
-PATIENT = 8              # Patient number, e.g. 9
-THRESHOLD = 0.50         # Probability threshold for predicting REM event (class 1)
-MASK_STAGES = [0, 1, 2, 3] # Stages to mask out (Stadium 5 / Wake entfernt)
-FEEDBACK_FILE = "DatabaseREMs/Visual_scoring1_excerpt9.txt"        # Feedback file path (only for "import")
+ACTION = EXPORT_ACTION
+PATIENT = EXPORT_PATIENT
+THRESHOLD = REM_THRESHOLD
 
 # Hyperparameters
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-CLASS = 2
-EMB_SIZE = 512
-nHEADS = 8
-D_HID = 1024
-nLAYERS = 2
-CNN_LAYERS = [2, 2, 2, 2]
-DROPOUT = 0.1
+CLASS = CLASS_COUNT
+EMB_SIZE = EMBEDDING_SIZE
+nHEADS = ATTENTION_HEADS
+D_HID = HIDDEN_SIZE
+nLAYERS = TRANSFORMER_LAYERS
 
 def export_predictions_for_group3(patient_id, from_scratch, threshold, mask_stages, output_dir):
     """
@@ -58,7 +71,7 @@ def export_predictions_for_group3(patient_id, from_scratch, threshold, mask_stag
         X = X.view(X.shape[0], 1, -1)
         
     dataset = torch.utils.data.TensorDataset(X.float())
-    loader = torch.utils.data.DataLoader(dataset, batch_size=16, shuffle=False)
+    loader = torch.utils.data.DataLoader(dataset, batch_size=EVALUATION_BATCH_SIZE, shuffle=False)
     
     # 2. Initialize and load model dynamically from partitioned folder
     modelCNN = resnet18(cnn_layers=CNN_LAYERS, in_lead=1).to(DEVICE)
@@ -120,8 +133,8 @@ def export_predictions_for_group3(patient_id, from_scratch, threshold, mask_stag
         f.write("[predicted_REMs/EOGs]\n")
         for i, pred in enumerate(masked_preds):
             if pred == 1: # REM predicted
-                start_sec = i * 2.0
-                duration_sec = 2.0
+                start_sec = i * WINDOW_STEP_SECONDS
+                duration_sec = WINDOW_STEP_SECONDS
                 f.write(f"   {start_sec:.4f}\t    {duration_sec:.4f}\n")
                 
     print(f"AI predictions for Patient {patient_id} successfully exported!")
@@ -167,13 +180,13 @@ def import_human_feedback(feedback_path, patient_num, output_preprocessed_dir):
                     start_time = float(parts[0])
                     duration = float(parts[1])
                     
-                    # Compute which 2-second epochs are touched by this event
-                    start_epoch = int(start_time // 2.0)
-                    end_epoch = int((start_time + duration) // 2.0)
-                    
-                    # Mark epochs in array (Class 1 = REM)
-                    for epoch_idx in range(start_epoch, min(end_epoch + 1, num_epochs)):
-                        updated_labels[epoch_idx] = 1
+                    # Mark every overlapping 2-second window (1-second step).
+                    event_end = start_time + duration
+                    for epoch_idx in range(num_epochs):
+                        window_start = epoch_idx * WINDOW_STEP_SECONDS
+                        window_end = window_start + WINDOW_DURATION_SECONDS
+                        if window_start < event_end and window_end > start_time:
+                            updated_labels[epoch_idx] = 1
                 except ValueError:
                     continue
                     
