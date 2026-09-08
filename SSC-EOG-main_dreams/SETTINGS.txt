@@ -99,6 +99,7 @@ vermischen.
 -----------
 
 FROM_SCRATCH            = True
+USE_HYPNOGRAM_FOR_TRAINING = False
 EPOCHS                  = 15
 BATCH_SIZE              = 32
 LEARNING_RATE           = 0.0002
@@ -107,6 +108,11 @@ DROPOUT                 = 0.1
 
 Wenn FROM_SCRATCH = False gesetzt wird, versucht die Pipeline, ein vortrainiertes
 Modell aus dem Sleep-EDF-Output zu laden.
+
+USE_HYPNOGRAM_FOR_TRAINING = False ist fuer den Human-in-the-Loop-Betrieb
+empfohlen. Dann werden alle EOG-Fenster trainiert, auch Wachphasen, und das
+Hypnogramm ist fuer das Training nicht erforderlich. Bei True werden Wachfenster
+wie bisher vor dem Training entfernt.
 
 
 5. MODELL

@@ -33,6 +33,7 @@ from settings import (
     TRAINING_BATCH_SIZE,
     TRAINING_EPOCHS,
     TRANSFORMER_LAYERS,
+    USE_HYPNOGRAM_FOR_TRAINING,
 )
 
 # 1. SETTINGS (Adjust training parameters here!)
@@ -63,13 +64,15 @@ def main():
         return
         
     print(f"Data successfully loaded. Shapes: X={X.shape}, Y={y.shape}, Stages={stages.shape}")
-    
-    # Filter out Wake stages (stage == 5) from training
-    non_wake_indices = (stages != 5)
-    X = X[non_wake_indices]
-    y = y[non_wake_indices]
-    stages = stages[non_wake_indices]
-    print(f"Filtered out Wake stages. Training shapes: X={X.shape}, Y={y.shape}")
+
+    if USE_HYPNOGRAM_FOR_TRAINING:
+        non_wake_indices = (stages != 5)
+        X = X[non_wake_indices]
+        y = y[non_wake_indices]
+        stages = stages[non_wake_indices]
+        print(f"Hypnogram training filter enabled: wake windows removed. Training shapes: X={X.shape}, Y={y.shape}")
+    else:
+        print("Hypnogram training filter disabled: all windows are used for EOG-only training.")
     
     # Check signal shape (expected [N, 1, 200])
     if len(X.shape) != 3:
@@ -163,6 +166,7 @@ def main():
     param_path = os.path.join(output_dir, "parameters.txt")
     with open(param_path, "w") as f:
         f.write(f"From Scratch: {FROM_SCRATCH}\n")
+        f.write(f"Use Hypnogram for Training: {USE_HYPNOGRAM_FOR_TRAINING}\n")
         f.write(f"Patients: {PATIENTS}\n")
         f.write(f"Epochs: {TRAINING_EPOCHS}\n")
         f.write(f"Batch Size: {TRAINING_BATCH_SIZE}\n")
