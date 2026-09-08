@@ -1,5 +1,23 @@
 # Anleitung: Human-in-the-Loop und Nachtraining
 
+## Kurz erklaert
+
+Die KI untersucht das EOG-Signal und markiert Stellen, an denen sie ein
+moegliches REM-Ereignis erkennt. Diese Markierungen sind nur Vorschlaege und
+werden von einem Menschen im Review geprueft. Der Mensch bestaetigt richtige
+Vorschlaege oder korrigiert falsche Markierungen. Die korrigierten Daten werden
+anschliessend fuer ein Nachtraining verwendet, damit das Modell aus den
+menschlichen Entscheidungen lernen kann.
+
+```text
+EOG-Signal -> KI macht Vorschlaege -> Mensch prueft/korrigiert
+           -> korrigierte Daten -> Nachtraining -> verbessertes Modell
+```
+
+Das Modell ersetzt dabei nicht die menschliche Entscheidung. Es hilft, moegliche
+REM-Stellen schneller zu finden und ueberlaesst die endgueltige Kontrolle dem
+Menschen.
+
 Diese Anleitung beschreibt den kompletten Ablauf fuer die DREAMS-Pipeline:
 
 1. Einstellungen in `settings.py` pruefen
