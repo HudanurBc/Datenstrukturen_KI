@@ -134,7 +134,7 @@ die vorhandenen Modellgewichte bleiben direkt kompatibel.
 ----------------------
 
 REM_THRESHOLD           = 0.5
-STAGE_MASKING           = deaktiviert oder projektspezifisch
+STAGE_MASKING           = deaktiviert (MASK_STAGES = [])
 EXPORT_STEP_SECONDS     = 1.0
 
 Bei überlappenden Fenstern werden positive Vorhersagen als 1-Sekunden-Schritte
