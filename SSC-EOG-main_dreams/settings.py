@@ -38,6 +38,15 @@ EXPORT_ACTION = "export"
 EXPORT_PATIENT = 8
 FEEDBACK_FILE = "DatabaseREMs/Visual_scoring1_excerpt9.txt"
 
+# Human-in-the-loop Nachtraining
+REVIEWED_DATA_FILE = "../reviewed_data/pat8-korriegiert.csv"
+REVIEWED_PATIENT = 8
+FINETUNE_EPOCHS = 5
+FINETUNE_BATCH_SIZE = 32
+FINETUNE_LEARNING_RATE = 0.00005
+FINETUNE_OUTPUT_MODEL = "dreams_model_feedback_patient8.pth"
+REQUIRE_REVIEW_ORIGINAL_MATCH = True
+
 # Modellparameter. Diese muessen bei Transfer Learning zum Checkpoint passen.
 CLASS_COUNT = 2
 EMBEDDING_SIZE = 512

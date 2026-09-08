@@ -141,7 +141,24 @@ Bei überlappenden Fenstern werden positive Vorhersagen als 1-Sekunden-Schritte
 exportiert. Dadurch entstehen keine künstlich doppelten 2-Sekunden-Annotationen.
 
 
-7. NACH EINER ÄNDERUNG
+7. HUMAN-IN-THE-LOOP NACH​​TRAINING
+-----------------------------------
+
+REVIEWED_DATA_FILE          = ../reviewed_data/pat8-korriegiert.csv
+REVIEWED_PATIENT            = 8
+FINETUNE_EPOCHS             = 5
+FINETUNE_BATCH_SIZE         = 32
+FINETUNE_LEARNING_RATE      = 0.00005
+FINETUNE_OUTPUT_MODEL       = dreams_model_feedback_patient8.pth
+REQUIRE_REVIEW_ORIGINAL_MATCH = True
+
+Das Nachtraining wird mit finetune_reviewed.py gestartet. Die CSV muss dieselbe
+Fensterung wie die aktuelle NPZ-Datei enthalten. Das Skript prueft Fensteranzahl,
+Epoch-Nummern und die bisherigen Labels, bevor Daten verwendet werden. Bei einem
+Fehler wird das bestehende Modell nicht veraendert.
+
+
+8. NACH EINER ÄNDERUNG
 ----------------------
 
 1. Werte in settings.py auswählen und ändern.
