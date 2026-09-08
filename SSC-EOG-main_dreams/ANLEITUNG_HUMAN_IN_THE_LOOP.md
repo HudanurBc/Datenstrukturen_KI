@@ -9,33 +9,184 @@ Vorschlaege oder korrigiert falsche Markierungen. Die korrigierten Daten werden
 anschliessend fuer ein Nachtraining verwendet, damit das Modell aus den
 menschlichen Entscheidungen lernen kann.
 
-### Was bedeutet das genau?
+## 1. Was bedeutet Nachtraining im Code?
 
-**Nachtraining:** Das bereits trainierte Modell wird nicht neu erstellt. Es wird
-mit den menschlich geprueften EOG-Fenstern erneut trainiert. Dabei werden die
-Modellgewichte leicht angepasst, damit die KI aus den Bestaetigungen und
-Korrekturen lernt. Das urspruengliche Modell bleibt unveraendert; es wird ein
-neues Feedback-Modell gespeichert.
+Das Nachtraining startet mit einem bereits trainierten Modell:
 
-**Erlaubte Korrekturen:** Fuer jedes Fenster wird nur zwischen `REM` und
-`Non-REM` entschieden. Erlaubt sind:
+```text
+Basis-Modell:
+output/scratch/.../dreams_model.pth
+```
 
-- einen richtigen REM-Vorschlag bestaetigen
-- einen falschen REM-Vorschlag auf Non-REM korrigieren
-- einen uebersehenen REM-Fall von Non-REM auf REM korrigieren
-- einen richtigen Non-REM-Vorschlag bestaetigen
+Dann passiert in `finetune_reviewed.py`:
 
-Andere Angaben wie `Wake`, `Artefakt` oder `Unsicher` werden vom aktuellen
-Nachtraining nicht als eigene Klassen erkannt. Sie muessen als `REM` oder
-`Non-REM` eingetragen werden.
+1. Die menschliche CSV wird geladen.
+2. `final_binary` wird als neues korrektes Label verwendet:
+    - `REM` = `1`
+    - `Non-REM` = `0`
+3. Die passenden EOG-Fenster aus `patient_8.npz` werden geladen.
+4. Das bestehende Modell wird geladen.
+5. Das Modell sieht erneut die EOG-Fenster und die menschlichen Labels.
+6. Die Modellgewichte werden mit dem Adam-Optimierer angepasst.
+7. Das Basismodell bleibt unverändert.
+8. Das neue Modell wird gespeichert:
 
-**Warum muss die Fensterung gleich bleiben?** Ein Label gehoert immer zu einem
-bestimmten Signalabschnitt. Bei der aktuellen Einstellung bedeutet Fenster 0
-beispielsweise 0 bis 2 Sekunden und Fenster 1 1 bis 3 Sekunden. Wird die
-Schrittweite oder Fensterlaenge geaendert, gehoert dieselbe Epochennummer zu
-einem anderen Signalabschnitt. Alte Korrekturen wuerden dann auf falsche EOG-
-Daten angewendet. Deshalb muessen Review-Datei und Trainingsdaten dieselbe
-Fensterlaenge, Schrittweite und Samplingrate verwenden.
+```text
+output/feedback/dreams_model_feedback_patient8.pth
+```
+
+Aktuelle Einstellungen:
+
+```python
+FINETUNE_EPOCHS = 5
+FINETUNE_BATCH_SIZE = 32
+FINETUNE_LEARNING_RATE = 0.00005
+```
+
+Das ist also kein komplett neues Training von null, sondern ein vorsichtiges Weiterlernen mit den menschlich korrigierten Beispielen.
+
+Wichtig: Die Spalte `corrected` wird aktuell nur dokumentiert. Für das Training wird direkt die Spalte `final_binary` verwendet.
+
+---
+
+## 2. Welche menschlichen Korrekturen sind erlaubt?
+
+Erlaubt sind Korrekturen pro exakt definiertem Fenster:
+
+```text
+REM
+Non-REM
+```
+
+Beispiel:
+
+```csv
+epoch,start_seconds,original_binary,auto_suggestion,final_binary,corrected
+11,11.0,Non-REM,REM,Non-REM,True
+12,12.0,REM,Non-REM,REM,True
+```
+
+Das bedeutet:
+
+- Fenster 11 wurde von der KI fälschlich als REM erkannt und vom Menschen auf Non-REM korrigiert.
+- Fenster 12 wurde von der KI fälschlich als Non-REM erkannt und vom Menschen auf REM korrigiert.
+
+### Das Skript erkennt beziehungsweise akzeptiert:
+
+- REM zu Non-REM
+- Non-REM zu REM
+- Bestätigung eines richtigen Vorschlags
+- Korrektur eines falschen Vorschlags
+- Labels als Text oder als `1` und `0`
+
+### Das Skript lehnt ab oder kann es nicht korrekt verarbeiten:
+
+- fehlende `final_binary`-Spalte
+- andere Werte wie `Wake`, `Artefakt`, `Unsicher`
+- mehrere Klassen statt nur REM/Non-REM
+- fehlende Fenster
+- doppelte Fenster
+- nicht fortlaufende Epochennummern
+- andere Fensteranzahl
+- CSV aus einer anderen Fensterung
+- menschliche Markierung nur als Zeitbereich ohne Umwandlung in Fensterlabels
+- unklare oder leere Labels
+
+Die zentrale Prüfung ist:
+
+```text
+CSV-Fensteranzahl = NPZ-Fensteranzahl
+```
+
+Bei unserem aktuellen Patient-8-Datensatz müssen es `1799` Fenster sein.
+
+Zusätzlich prüft der Code `original_binary`. Diese Werte müssen zu den ursprünglichen Labels in `patient_8.npz` passen. Damit wird verhindert, dass eine Review-Datei für eine andere Datenversion versehentlich verwendet wird.
+
+---
+
+## 3. Warum passen alte Korrekturen bei anderer Fensterung nicht?
+
+Ein Fenster ist nicht nur ein Label, sondern enthält ein ganz bestimmtes Signalstück.
+
+Aktuelle Einstellung:
+
+```python
+WINDOW_DURATION_SECONDS = 2.0
+WINDOW_STEP_SECONDS = 1.0
+```
+
+Das bedeutet:
+
+```text
+Fenster 0: 0 bis 2 Sekunden
+Fenster 1: 1 bis 3 Sekunden
+Fenster 2: 2 bis 4 Sekunden
+```
+
+Wenn man die Schrittweite ändert:
+
+```python
+WINDOW_STEP_SECONDS = 0.5
+```
+
+sieht die Einteilung so aus:
+
+```text
+Fenster 0: 0.0 bis 2.0 Sekunden
+Fenster 1: 0.5 bis 2.5 Sekunden
+Fenster 2: 1.0 bis 3.0 Sekunden
+```
+
+Dann bedeutet beispielsweise `epoch 1` nicht mehr dasselbe Signalstück wie vorher. Ein altes Label für `epoch 1` würde also auf das falsche EOG-Signal angewendet.
+
+Bei einer anderen Fensterlänge ist es noch problematischer:
+
+```text
+2 Sekunden = 200 Samples
+1 Sekunde = 100 Samples
+```
+
+Das bestehende Modell erwartet ungefähr:
+
+```text
+[Batch, 1, 200]
+```
+
+Eine Änderung auf 1-Sekunden-Fenster erzeugt aber:
+
+```text
+[Batch, 1, 100]
+```
+
+Dann ändern sich gleichzeitig:
+
+- Signalinhalt
+- Fenstergrenzen
+- Anzahl der Fenster
+- Bedeutung der Epochennummern
+- teilweise die Eingabegröße des Modells
+
+Deshalb kann eine alte korrigierte Datei nicht einfach weiterverwendet werden. Die menschliche Korrektur muss immer zur exakt gleichen Kombination gehören aus:
+
+```text
+Fensterlänge
+Schrittweite
+Samplingrate
+Patient
+Preprocessing-Version
+```
+
+Kurz gesagt:
+
+```text
+Gleiche Fensterung:
+alte Korrekturen verwendbar
+
+Andere Schrittweite oder Fensterlänge:
+neue Review-Datei erforderlich
+```
+
+Eine spätere Verbesserung wäre, zusätzlich `start_seconds` und `end_seconds` zu verwenden und Labels zeitbasiert zuzuordnen. Der aktuelle Code arbeitet aber bewusst mit der exakten Fensterreihenfolge und verhindert dadurch unsichere Zuordnungen.
 
 ```text
 EOG-Signal -> KI macht Vorschlaege -> Mensch prueft/korrigiert
