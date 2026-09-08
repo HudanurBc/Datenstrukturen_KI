@@ -9,6 +9,34 @@ Vorschlaege oder korrigiert falsche Markierungen. Die korrigierten Daten werden
 anschliessend fuer ein Nachtraining verwendet, damit das Modell aus den
 menschlichen Entscheidungen lernen kann.
 
+### Was bedeutet das genau?
+
+**Nachtraining:** Das bereits trainierte Modell wird nicht neu erstellt. Es wird
+mit den menschlich geprueften EOG-Fenstern erneut trainiert. Dabei werden die
+Modellgewichte leicht angepasst, damit die KI aus den Bestaetigungen und
+Korrekturen lernt. Das urspruengliche Modell bleibt unveraendert; es wird ein
+neues Feedback-Modell gespeichert.
+
+**Erlaubte Korrekturen:** Fuer jedes Fenster wird nur zwischen `REM` und
+`Non-REM` entschieden. Erlaubt sind:
+
+- einen richtigen REM-Vorschlag bestaetigen
+- einen falschen REM-Vorschlag auf Non-REM korrigieren
+- einen uebersehenen REM-Fall von Non-REM auf REM korrigieren
+- einen richtigen Non-REM-Vorschlag bestaetigen
+
+Andere Angaben wie `Wake`, `Artefakt` oder `Unsicher` werden vom aktuellen
+Nachtraining nicht als eigene Klassen erkannt. Sie muessen als `REM` oder
+`Non-REM` eingetragen werden.
+
+**Warum muss die Fensterung gleich bleiben?** Ein Label gehoert immer zu einem
+bestimmten Signalabschnitt. Bei der aktuellen Einstellung bedeutet Fenster 0
+beispielsweise 0 bis 2 Sekunden und Fenster 1 1 bis 3 Sekunden. Wird die
+Schrittweite oder Fensterlaenge geaendert, gehoert dieselbe Epochennummer zu
+einem anderen Signalabschnitt. Alte Korrekturen wuerden dann auf falsche EOG-
+Daten angewendet. Deshalb muessen Review-Datei und Trainingsdaten dieselbe
+Fensterlaenge, Schrittweite und Samplingrate verwenden.
+
 ```text
 EOG-Signal -> KI macht Vorschlaege -> Mensch prueft/korrigiert
            -> korrigierte Daten -> Nachtraining -> verbessertes Modell
